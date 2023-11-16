@@ -1,0 +1,695 @@
+---
+title: "hack4torism"
+author: "Ali Sarabandi & Angela Castaldo"
+date: "2023-10-25"
+output:
+  html_document:
+    code_folding: hide
+  pdf_document: default
+---
+
+![](https://media.licdn.com/dms/image/D4E22AQHy1Pf4tRImKA/feedshare-shrink_800/0/1696255466617?e=1700092800&v=beta&t=j9bfc7z0f7fQezceLbJ2ua0VzrIb2JifqwgQMq-ngiA)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    message = FALSE,
+    warning = FALSE,
+    cache = TRUE,
+    tidy = FALSE,
+    fig.width = 7,
+    fig.height = 7)
+
+```
+
+### INTRODUCTION:
+
+#### We present a meticulously crafted analysis of tourism in Campania, Italy, spanning the pre and post-COVID-19 eras. This collaborative effort combines the expertise of data analysis students (Ali Sarabandi and Angela Castaldo) with the insights of tourism students (Carmen Esposito and Giuseppe Lunella). We utilize data sets from the Italian National Institute of Statistics (ISTAT) and enhance our analysis with data from a renowned hostel in Naples, addressing the absence of data on hostel stays in ISTAT data sets. An enlightening survey captures the invaluable voices of tourists, providing deeper insights into their challenges and enabling us to propose solutions to enhance the quality of their experiences. Our R-based analysis ensures precision and credibility. We aspire that our insights and recommendations will embolden Campania's tourism industry to navigate this evolving landscape with resilience and confidence. First we will do some analysis on the datasets and at the end we propose some solutions in the conclusion section that we think they could help to improve tourism industry in Campania.
+
+```{r, warning=FALSE}
+#Library that we will use for the data analysis
+library(readr)
+library(ggplot2)
+library(waffle) 
+library(mosaicData)
+library(patchwork)
+library(tidyverse)
+library(lubridate)
+library(viridis) 
+library(hrbrthemes)
+library(ggrepel)
+library(patchwork)
+library(readxl)
+library(ggrepel)
+library(tidyr)
+library(ggalluvial)
+
+
+```
+
+### MATERIALS AND METHODES:
+
+**These are the links of data sets that we used form ISTAT database:**
+
+**1.Air transport arrivals** <http://dati.istat.it/Index.aspx?QueryId=25407&lang=en#>
+
+**2.Type of locality and country of residence** <https://esploradati.istat.it/databrowser/#/en/dw/categories/IT1,Z0700SER,1.0/SER_TOURISM/DCSC_TUR_OCCYEAR/IT1,122_54_DF_DCSC_TUR_10,1.0>
+
+**3.Accommodation of guests** <https://esploradati.istat.it/databrowser/#/en/dw/categories/IT1,Z0700SER,1.0/SER_TOURISM/DCSC_TUR_OCCMONTH/IT1,122_54_DF_DCSC_TUR_5,1.0>
+
+**4.Safety** <https://esploradati.istat.it/databrowser/#/en/dw/categories/IT1,Z0930TER,1.0/BES_T/IT1,DF_BES_TERRIT_7,1.0>
+
+**5.Touristic attractions** <https://esploradati.istat.it/databrowser/#/en/dw/categories/IT1,Z0930TER,1.0/BES_T/IT1,DF_BES_TERRIT_9,1.0>
+
+**Moreover to enhrich the Istat dataset, we collected two additional datasets from a hostel in Naples that focus on hostel guest numbers during and post the COVID-19 pandemic. The necessity arose because the Istat dataset lacked Naples-specific hostel guest data, a vital component for our Campania region analysis. Because the hostel manager requested that we refrain from publicly sharing the datasets, we are unable to provide any links here. However, we would be happy to share the data with you privately upon request.**
+
+```{r}
+airport_capadochino <- read_csv("/Users/alesarabandi/Downloads/airport capadochino.csv", 
+    col_types = cols(TIME = col_number(), 
+        Value = col_number()))
+
+touristicplaces <- read_excel("/Users/alesarabandi/Downloads/touristicplaces.xlsx", 
+ col_types = c("text", "text", "numeric","numeric", "numeric", "numeric"))
+
+Neh21<- read_excel("/Users/alesarabandi/Downloads/hacketon feb 21.xlsx", 
+    col_types = c("text", "date", "numeric", 
+        "numeric", "numeric", "numeric"))
+
+Neh22<- read_excel("/Users/alesarabandi/Downloads/hacketon feb 22.xlsx", 
+    col_types = c("text", "date", "numeric", 
+        "numeric", "numeric", "numeric"))
+
+Guests <- read_excel("/Users/alesarabandi/Downloads/Guests.xlsx")
+
+Locality <- read_excel("/Users/alesarabandi/Downloads/Locality.xlsx", 
+    col_types = c("text", "text", "text", 
+        "text", "numeric", "skip"))
+
+Safety_copy <- read_excel("/Users/alesarabandi/Downloads/Safety_copy.xlsx")
+```
+
+![](https://www.visitprocida.com/site/assets/files/31611/naples-aeroporto-nap.1920x1080-zoom.jpg){width="761" height="394"}
+
+**Air transport :** *The new statistical survey on air transport is a total survey collection information on the carriage of passengers, freight and mail by air, flight stages, available seats for passengers on aircraft and aircraft movements. The reporting units are the airports and the data are provided by their management companies. Quarterly data are referred only to the airports that send monthly data. We filtered the data to only have arrivals for Capodichino airport which is the only commercial airport in Naples which have international and national flights.*
+
+```{r}
+head(airport_capadochino)
+```
+
+In analysis of passenger arrivals at Capodichino airport in Naples spanning the years 2018 to 2022, our data reveals a significant trend in the composition of arrivals. The presented pie chart vividly illustrates that 60 percent of these arrivals are attributed to international flights, underscoring the airport's vital role as a gateway to Naples for travelers from foreign countries. This finding highlights the enduring appeal of Naples as an international tourist destination and reinforces the significance of Capodichino airport as a pivotal link between Naples and the global stage.
+
+```{r}
+summarized_data <- airport_capadochino %>%
+  select(Value, `Origin / Destination`) %>%
+  filter(`Origin / Destination` %in% c("Italy", "Foreign countries")) %>%
+  group_by(`Origin / Destination`) %>%
+  summarize(Tot_pop = sum(Value))
+
+pie_chart <- ggplot(summarized_data, aes(x = 1, y = Tot_pop, fill = `Origin / Destination`)) +
+  geom_bar(stat = "identity", width = 1, color = "black", size = 1.5) +  # Add white border
+  geom_text(aes(label = scales::percent(Tot_pop / sum(Tot_pop)), y = Tot_pop), position = position_stack(vjust = 0.5), size = 6, family = "Arial", color = "black") +
+  scale_fill_manual(values = c("Italy" = "green", "Foreign countries" = "yellow")) +  # Discrete color scale
+  coord_polar(theta = "y") +
+  labs(title = "Arrival passengers to Capodichino airport 2018-2022", fill = "") +
+  theme_void() +  # Remove background and axis labels
+  theme(legend.position = "right")  # Move the legend to the right
+
+print(pie_chart)
+```
+
+In our in-depth analysis of the annual arriving passenger data at Capodichino airport from 2018 to 2022, a compelling narrative emerges as we examine the impact of the COVID-19 pandemic on international travel. The time series graph vividly illustrates a substantial drop in arriving passengers in the year 2020, coinciding with the onset of the global pandemic and the subsequent lockdown measures. This decline serves as a stark reminder of the profound challenges faced by the travel industry during the height of the crisis. However, our data also reveals a resilient recovery trend, particularly after 2021. This resurgence is attributed to a combination of factors, including the relaxation of lockdown measures, the availability of COVID-19 vaccines, and the cautious reopening of international borders with certain restrictions.
+
+```{r}
+airport_capadochino %>% select(TIME, Value, `Origin / Destination`) %>% filter(`Origin / Destination` %in% c("Italy", "Foreign countries")) %>%
+   group_by(TIME,`Origin / Destination`) %>%
+   summarize(Tot_pop=sum(Value)) %>%
+   ggplot(aes(x=TIME,y=Tot_pop,color=`Origin / Destination`))+
+   geom_line(size=1)+
+   labs(title = "Annual Arriving Passengers Time Series",
+       x = "Year",
+       y = "Arriving Passengers") + scale_y_continuous(labels = scales::comma)
+
+```
+
+![](https://m.media-amazon.com/images/I/917cBOZVOvS.jpg)
+
+**Origin country of guests:** *The annual survey of the capacity of tourist accommodation establishments collects the main structural information regarding the accommodation establishments. The survey is currently carried out according to the European Regulation 692/2011 concerning European statistics on tourism. It quantifies, at municipality level, the number of establishments, bed places, bedrooms and bathrooms for hotels and similar accommodation, the number of establishments and bed places for the other collective accommodations. The Istat form CTT/4 is filled by Local bodies on Tourism (depending on the local regulations) which provide to transmit it to Istat. Data are collected according to the type of accommodation as follows: hotels and similar establishments (classified into 5 categories and hotel-tourism residences RTA); other collective accommodation establishments (tourist camp-sites, holiday villages, tourist camp-sites and holiday villages-mixed forms, holiday dwellings (rented), farmhouses , youth hostels, holidays homes, mountain refuges, other accommodation, bed and breakfast and other private accommodations)*
+
+```{r}
+Guests_a <- Guests %>% filter(Indicator == 'Arrivals')
+head(Guests)
+```
+
+The line chart presented below illustrates the variations in guest arrivals from 2018 to 2019. Notably, there is a discernible uptick in arrivals during this period. It is reasonable to assume that this positive trend would have persisted into 2020 were it not for the outbreak of the COVID-19 pandemic. The chart demonstrates that in 2021, hotels and similar accommodations experienced a significant decline in guest arrivals, a consequence of the strict COVID-19 regulations. While these measures were imperative for curbing the spread of the virus, they also exacted a profound economic toll on many establishments in Italy, particularly within the Campania region. Many of these facilities are still in the process of recovery.
+
+Fortunately, the subsequent year displayed an increase in guest arrivals, which continued into the subsequent year. Importantly, the growth in arrivals during this period outpaced the pre-pandemic levels.
+
+```{r}
+Guests_a <- Guests_a %>% 
+  pivot_longer(
+    cols = '2018':'2022', 
+    names_to = "Year",
+    values_to = "Value"
+)
+
+Arrivals <- Guests_a %>%
+  group_by(Year) %>%
+  summarise(Value = sum(Value))
+
+ggplot(Arrivals, aes(x=Year, y=Value, group = 1)) +
+  geom_line( color="steelblue",size = 1.5) + 
+  geom_point() +
+  scale_y_continuous(labels=scales::comma)+
+  xlab("Year") +
+  ylab("Arrivals")+
+  ggtitle("Arrivals by year")+
+  theme(axis.text.x=element_text(angle=60, hjust=1))
+```
+
+The subsequent line chart illustrates the duration of stays in hotels and similar accommodations located in Campania, spanning from 2018 to 2022. As anticipated, it mirrors the previous trend, exhibiting a substantial decline in 2020, followed by a modest recovery in 2021 that persisted into 2022.
+
+```{r}
+Guests_n <- Guests %>% filter(Indicator == 'Nights spent')
+
+Guests_n <- Guests_n %>% 
+  pivot_longer(
+    cols = '2018':'2022', 
+    names_to = "Year",
+    values_to = "Value"
+)
+
+Nights <- Guests_n %>%
+  group_by(Year) %>%
+  summarise(Value = sum(Value))
+
+ggplot(Nights, aes(x=Year, y=Value, group = 1)) +
+  geom_line( color="steelblue",size = 1.5) + 
+  geom_point() +
+  scale_y_continuous(labels=scales::comma)+
+  xlab("Year") +
+  ylab("Nights spent")+
+  ggtitle("Nights spent by year")+
+  theme(axis.text.x=element_text(angle=60, hjust=1))
+```
+
+The following bar chart illustrates the arrivals in various provinces of Campania in 2018, prior to the onset of the Covid-19 pandemic. Notably, Naples emerged as the most frequented province, renowned among both foreign and Italian tourists. In contrast, Caserta registered as the third least visited province. Furthermore, it's worth mentioning that Naples was the sole province with a higher number of foreign tourists compared to Italian tourists. This phenomenon can be attributed to the province's rich historical heritage, cultural attractions, museums, and its picturesque coastline. Nevertheless, it's essential to emphasize that other provinces within Campania offer comparable tourist attractions, such as the Royal Palace of Caserta. The challenge lies in raising awareness of these hidden gems to enhance tourism throughout the Campania region.
+
+```{r}
+Arrivals <- Guests_a %>%
+  group_by(Year, Territory, `Country of guests`) %>%
+  summarize(Total_Arrivals = sum(Value))
+
+Arrivals_2018 <- Arrivals %>% filter(Year == '2018')
+Arrivals_2019 <- Arrivals %>% filter(Year == '2019')
+Arrivals_2020 <- Arrivals %>% filter(Year == '2020')
+Arrivals_2021 <- Arrivals %>% filter(Year == '2021')
+Arrivals_2022 <- Arrivals %>% filter(Year == '2022')
+ggplot(Arrivals_2018, aes(x = Territory, y = Total_Arrivals, fill = `Country of guests`))+labs(title = "Total Arrivals in 2018 by Province and Country of Guests",x = "Province",y = "Total Arrivals") +
+  geom_bar(stat="identity", width=.5, position = "dodge")
+
+```
+
+In the year 2019, a marginal uptick in tourist numbers is evident across all provinces; however, aside from this increase, there were no significant alterations compared to the previous year.
+
+```{r}
+ggplot(Arrivals_2019, aes(x = Territory, y = Total_Arrivals, fill = `Country of guests`))+labs(title = "Total Arrivals in 2019 by Province and Country of Guests",x = "Province",y = "Total Arrivals") +
+  geom_bar(stat="identity", width=.5, position = "dodge")
+```
+
+There is a noticeable substantial decline in tourist numbers from 2019 to 2020. Additionally, it is evident that the number of Italian tourists now surpasses that of foreign tourists, primarily due to the pandemic's restrictive regulations, which virtually rendered cross-border travel impossible.
+
+```{r}
+ggplot(Arrivals_2020, aes(x = Territory, y = Total_Arrivals, fill = `Country of guests`))+labs(title = "Total Arrivals in 2020 by Province and Country of Guests",x = "Province",y = "Total Arrivals") +
+  geom_bar(stat="identity", width=.5, position = "dodge")
+```
+
+2021 saw a minimal increase in the number of tourists, with foreign ones still being in the minority.
+
+```{r}
+ggplot(Arrivals_2021, aes(x = Territory, y = Total_Arrivals, fill = `Country of guests`))+labs(title = "Total Arrivals in 2021 by Province and Country of Guests",x = "Province",y = "Total Arrivals") +
+  geom_bar(stat="identity", width=.5, position = "dodge")
+```
+
+In 2022, the upward trend in tourist numbers continued, and notably, for the first time since 2018, foreign tourists in Naples surpassed Italian tourists. However, this distinction does not apply to the other provinces, which remain relatively less recognized by international visitors.
+
+```{r}
+ggplot(Arrivals_2022, aes(x = Territory, y = Total_Arrivals, fill = `Country of guests`))+labs(title = "Total Arrivals in 2022 by Province and Country of Guests",x = "Province",y = "Total Arrivals") +
+  geom_bar(stat="identity", width=.5, position = "dodge")
+```
+
+The subsequent bar charts exhibit a consistent pattern akin to the previous ones. In 2018 and 2019, the duration of stays in Naples exceeded that of other provinces, with a notable prevalence of foreign tourists. However, in 2020 and 2021, Italians accounted for more nights spent. Notably, in 2022, the figures closely resembled those of 2018.
+
+```{r}
+Nights <- Guests_n %>%
+  group_by(Year, Territory, `Country of guests`) %>%
+  summarize(Total_Nights = sum(Value))
+
+Nights_2018 <- Nights %>% filter(Year == '2018')
+Nights_2019 <- Nights %>% filter(Year == '2019')
+Nights_2020 <- Nights %>% filter(Year == '2020')
+Nights_2021 <- Nights %>% filter(Year == '2021')
+Nights_2022 <- Nights %>% filter(Year == '2022')
+ggplot(Nights_2018, aes(x = Territory, y = Total_Nights, fill = `Country of guests`))+labs(title = "Total Nights Spent in 2018 by Province and Country of Guests",x = "Province",y = "Total Nights spent") +
+  geom_bar(stat="identity", width=.5, position = "dodge")+
+  scale_y_continuous(labels=scales::comma)
+```
+
+```{r}
+ggplot(Nights_2019, aes(x = Territory, y = Total_Nights, fill = `Country of guests`))+labs(title = "Total Nights Spent in 2019 by Province and Country of Guests",x = "Province",y = "Total Nights spent") +   geom_bar(stat="identity", width=.5, position = "dodge")+   scale_y_continuous(labels=scales::comma)
+```
+
+```{r}
+ggplot(Nights_2020, aes(x = Territory, y = Total_Nights, fill = `Country of guests`))+labs(title = "Total Nights Spent in 2020 by Province and Country of Guests",x = "Province",y = "Total Nights spent") +
+  geom_bar(stat="identity", width=.5, position = "dodge")+
+  scale_y_continuous(labels=scales::comma)
+```
+
+```{r}
+ggplot(Nights_2021, aes(x = Territory, y = Total_Nights, fill = `Country of guests`))+labs(title = "Total Nights Spent in 2021 by Province and Country of Guests",x = "Province",y = "Total Nights spent") +
+  geom_bar(stat="identity", width=.5, position = "dodge")+
+  scale_y_continuous(labels=scales::comma)
+```
+
+```{r}
+ggplot(Nights_2022, aes(x = Territory, y = Total_Nights, fill = `Country of guests`))+labs(title = "Total Nights Spent in 2022 by Province and Country of Guests",x = "Province",y = "Total Nights spent") +
+  geom_bar(stat="identity", width=.5, position = "dodge")+
+  scale_y_continuous(labels=scales::comma)
+```
+
+The provided pie chart presents the distribution of foreign and Italian tourists in Campania, Italy. While Naples, as the most frequented province, had a higher number of foreign tourists, the overall proportion of Italian tourists is slightly higher than that of foreign tourists, though the disparity is not particularly significant.
+
+```{r}
+Guests_1<- Guests%>% 
+  pivot_longer(
+    cols = '2018':'2022', 
+    names_to = "Year",
+    values_to = "Value"
+)
+
+Country <- Guests_1%>%
+  group_by(Year,`Country of guests`) %>%
+  summarize(Total = sum(Value))
+Country_2018 <- Country %>% filter(Year == '2018') 
+
+ggplot(Country_2018, aes(x = "", y = Total, fill = fct_inorder(`Country of guests`))) +
+  geom_bar(stat = "identity", width = 1, color = "black", size = 1.5) +  
+  geom_text(aes(label = scales::percent(Total / sum(Total)), y = Total), position = position_stack(vjust = 0.5), size = 6, family = "Arial", color = "black") +
+  scale_fill_manual(values = c("Italy" = "green", "Foreign" = "yellow")) + 
+  coord_polar(theta = "y") +
+  labs(title = "Foreign and Italian tourists in Campania in 2018", fill = "") +
+  theme_void() + 
+  theme(legend.position = "right") 
+
+```
+
+Very similar numbers can be observed for 2019, with a barely noticeable increase and decrease of foreign and Italian tourists respectively.
+
+```{r}
+Country_2019<- Country %>% filter(Year == '2019') 
+
+ggplot(Country_2019, aes(x = "", y = Total, fill = fct_inorder(`Country of guests`))) +
+  geom_bar(stat = "identity", width = 1, color = "black", size = 1.5) +  
+  geom_text(aes(label = scales::percent(Total / sum(Total)), y = Total), position = position_stack(vjust = 0.5), size = 6, family = "Arial", color = "black") +
+  scale_fill_manual(values = c("Italy" = "green", "Foreign" = "yellow")) + 
+  coord_polar(theta = "y") +
+  labs(title = "Foreign and Italian tourists in Campania in 2019", fill = "") +
+  theme_void() + 
+  theme(legend.position = "right") 
+
+```
+
+In 2020, the year following the onset of the Covid-19 pandemic, Italian tourists overwhelmingly dominated, with foreign tourists accounting for less than 20% of the total, largely due to the stringent regulations in effect during that period.
+
+```{r}
+Country_2020 <- Country %>% filter(Year == '2020') 
+
+ggplot(Country_2020, aes(x = "", y = Total, fill = fct_inorder(`Country of guests`))) +
+  geom_bar(stat = "identity", width = 1, color = "black", size = 1.5) +  
+  geom_text(aes(label = scales::percent(Total / sum(Total)), y = Total), position = position_stack(vjust = 0.5), size = 6, family = "Arial", color = "black") +
+  scale_fill_manual(values = c("Italy" = "green", "Foreign" = "yellow")) + 
+  coord_polar(theta = "y") +
+  labs(title = "Foreign and Italian tourists in Campania in 2020", fill = "") +
+  theme_void() + 
+  theme(legend.position = "right") 
+
+```
+
+Despite somewhat less stringent regulations compared to the previous year, it is evident that in 2021, a significant number of individuals remained reluctant to engage in cross-border travel. Consequently, while the number of foreign tourists increased to 25%, it remained lower than the number of Italian tourists.
+
+```{r}
+Country_2021 <- Country %>% filter(Year == '2021') 
+
+ggplot(Country_2021, aes(x = "", y = Total, fill = fct_inorder(`Country of guests`))) +
+  geom_bar(stat = "identity", width = 1, color = "black", size = 1.5) +  
+  geom_text(aes(label = scales::percent(Total / sum(Total)), y = Total), position = position_stack(vjust = 0.5), size = 6, family = "Arial", color = "black") +
+  scale_fill_manual(values = c("Italy" = "green", "Foreign" = "yellow")) + 
+  coord_polar(theta = "y") +
+  labs(title = "Foreign and Italian tourists in Campania in 2021", fill = "") +
+  theme_void() + 
+  theme(legend.position = "right") 
+
+```
+
+In 2022, the percentages have nearly reverted to the levels observed in 2018, with the disparity between foreign and Italian tourists remaining marginal. However, it is evidently crucial to proactively promote our region as a whole and its individual provinces. This strategic approach is essential to foster continued growth in the number of foreign tourists and enhance the overall tourism sector in our region.
+
+```{r}
+Country_2022 <- Country %>% filter(Year == '2022') 
+
+ggplot(Country_2022, aes(x = "", y = Total, fill = fct_inorder(`Country of guests`))) +
+  geom_bar(stat = "identity", width = 1, color = "black", size = 1.5) +  
+  geom_text(aes(label = scales::percent(Total / sum(Total)), y = Total), position = position_stack(vjust = 0.5), size = 6, family = "Arial", color = "black") +
+  scale_fill_manual(values = c("Italy" = "green", "Foreign" = "yellow")) + 
+  coord_polar(theta = "y") +
+  labs(title = "Foreign and Italian tourists in Campania in 2022", fill = "") +
+  theme_void() + 
+  theme(legend.position = "right") 
+
+```
+
+![](https://parisjetaime.com/data/layout_image/fr-FR/Hotel-enseigne-neon-630x405-C-Thinkstock.jpg)
+
+**Accommodation of guests:** *The most interesting aspect of the survey concerns the dissemination of occupancy data in collective accommodation establishments by all the possible combinations of the collected variables: category of hotels and similar accommodation and type of other collective accommodation establishments, months, region of residence or country of residence, area of destination (region, province, sub-province), type of locality. This also allows detailed analysis of the relationships between these variables.*
+
+```{r}
+head(Locality)
+
+```
+
+The bar charts below depict the volume of arrivals and nights spent in hotels across various types of localities in Italy. Italy's renowned historical and artistic heritage, along with its rich cultural heritage, has unsurprisingly led to historical and artistic localities being the most frequented. Notably, there is a substantial gap between these and the second most visited type, which is seaside destinations. Given Italy's abundance of beautiful coastal locations, this trend is also expected.
+
+To bolster tourism in Campania, it is imperative to focus on promoting these favored tourist destinations, specifically historical and artistic sites, as well as picturesque seaside locales, in alignment with the preferences of tourists.
+
+```{r}
+Locality_a <- Locality %>% filter(Indicator == 'Arrivals')
+
+Locality_a <- Locality_a%>%
+  group_by(Locality) %>%
+  summarize(Total = sum(Total))
+
+Locality_n <- Locality %>% filter(Indicator == 'Nights spent')
+
+Locality_n <- Locality_n%>%
+  group_by(Locality) %>%
+  summarize(Total = sum(Total))
+
+ggplot(Locality_a, aes(x = Locality, y = Total)) +
+  geom_bar(stat = "identity", fill = 4) +
+  labs(title = "Arrivals by Locality Type",
+       x = "Locality Type",
+       y = "Number of Arrivals")+
+  scale_y_continuous(labels=scales::comma)+
+  theme(axis.text.x=element_text(angle=60, hjust=1))
+
+```
+
+The presented bar chart reveals that while historical and artistic localities draw more visitors, seaside locations tend to command longer stays. This pattern can be attributed to tourists visiting historical sites primarily for their museums and cultural attractions, often leaving after a day or two of exploration. In contrast, seaside destinations are favored for extended periods of leisure and relaxation, particularly during the summer season.
+
+```{r}
+ggplot(Locality_n, aes(x = Locality, y = Total)) +
+  geom_bar(stat = "identity", fill = 4) +
+  labs(title = "Nights spent by Locality Type",
+       x = "Locality Type",
+       y = "Number of Nights Spent")+
+  scale_y_continuous(labels=scales::comma)+
+  theme(axis.text.x=element_text(angle=60, hjust=1))
+```
+
+The Sankey plot presented confirms the previously observed trend, where the differentiation between foreign and Italian tourists is relatively subtle. Notably, Italian tourists outnumber their foreign counterparts, and interestingly, they exhibit a distinct preference for seaside locations, while foreign tourists lean more towards visiting historical and artistic sites.
+
+```{r}
+
+Locality_1 <- Locality[-c(33:64), ] 
+
+ggplot(data = Locality_1,
+       aes(axis1 = Indicator, 
+           axis2 = `Country of guests`,
+           axis3 = Locality,
+           y = Total)) +
+  geom_alluvium(aes(fill = Accomodation)) +
+  geom_stratum() +
+  geom_text(stat = "stratum",
+            aes(label = after_stat(stratum))) +
+  scale_fill_viridis_d() +
+   scale_x_discrete(limits = c("Indicator", "Country of guests","Locality"),
+                   expand = c(0.15, 0.05)) +
+  theme_void()
+```
+
+![](https://yourguidetoitaly.com/slowitaly/wp-content/uploads/2018/06/campania-collage-new.jpg)
+
+**Touristic attractions:** *This dataset provides a comprehensive view of the number of permanent exhibition facilities per 100 square kilometers, encompassing tourist attractions such as museums, national parks, and rural facilities. The focus is directed towards five key cities in the Campania region, namely Naples, Salerno, Benevento, Caserta, and Avellino. This data enables us to discern the potential tourist allure of these cities, shedding light on the availability of cultural, natural, and rural attractions that can contribute to their appeal as visitor destinations.*
+
+```{r}
+head(touristicplaces)
+```
+
+In our comprehensive analysis of tourist attractions in the Campania region, spanning the years 2018 to 2021, we present a series of insightful bar charts. These visualizations offer a valuable perspective on the distribution of tourist attractions, encompassing categories such as museums, historic parks and gardens, and rural tourism facilities, across five major cities: Naples, Benevento, Salerno, Caserta, and Avellino.The data reveals a noteworthy trend, indicating that the number of tourist attractions within these cities remained relatively stable over the four-year period. This constancy underscores the enduring appeal of Campania as a tourist destination, with attractions maintaining their presence despite external challenges and changes.Notably, Naples consistently emerges as the city with the highest number of tourist attractions, particularly in the category of museums. This prominence can be attributed, in large part, to the presence of the world-renowned archaeological site of Pompeii, which significantly bolsters Naples' reputation as a cultural and historical hub.Furthermore, the data highlights Caserta's exceptional standing in the domain of historic parks and gardens. Caserta's Royal Palace, an architectural masterpiece and a UNESCO World Heritage Site, contributes significantly to the city's prominence in this category. The sustained high number of historic parks and gardens in Caserta reflects the enduring allure of this architectural gem.
+
+```{r}
+p1 <- touristicplaces %>% select(Indicator,`2018` , Territory)%>%
+group_by(Territory)%>%
+ggplot(aes(x = Territory, y = `2018`, fill = Indicator)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Number of tourist attractions per 100 sq.km - 2018",
+       x = "Cities",
+       y = "Frequency") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+p2 <- touristicplaces %>% select(Indicator,`2019` , Territory)%>%
+group_by(Territory)%>%
+ggplot(aes(x = Territory, y = `2019`, fill = Indicator)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Number of tourist attractions per 100 sq.km - 2019",
+       x = "Cities",
+       y = "Frequency") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+p3 <- touristicplaces %>% select(Indicator,`2020` , Territory)%>%
+group_by(Territory)%>%
+ggplot(aes(x = Territory, y = `2020`, fill = Indicator)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Number of tourist attractions per 100 sq.km - 2020",
+       x = "Cities",
+       y = "Frequency") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p4 <- touristicplaces %>% select(Indicator,`2021` , Territory)%>%
+group_by(Territory)%>%
+ggplot(aes(x = Territory, y = `2021`, fill = Indicator)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Number of tourist attractions per 100 sq.km - 2021",
+       x = "Cities",
+       y = "Frequency") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+print(p1)
+print(p2)
+print(p3)
+print(p4)
+```
+
+![](https://files.ameyawdebrah.com/wp-content/uploads/2023/04/24082024/nomads-brisbane-hostel-dorm.jpg)
+
+**Hostel datasets:** *As alluded to in our project's introduction, the specific categorization of hostels as a distinct accommodation type was not explicitly provided in the ISTAT dataset, despite its significant relevance in contemporary travel dynamics. Hostels, particularly favored by young and solo travelers for reasons extending beyond affordability, play a crucial role in fostering social connections during journeys. Recognizing this importance, we embarked on a proactive data acquisition effort. To rectify this gap in our analysis, we turned to Booking.com, one of the largest providers in the accommodation industry. Our pursuit led us to identify and engage with the top-rated hostels in Naples. Subsequently, we initiated meetings with their management teams, where we presented our project's objectives and methodology. During these interactions, we requested access to data pertaining to the number of guests at these hostels during two pivotal periods: February 2021, a time marked by stringent lockdown measures, and 2022, characterized by a gradual easing of restrictions. The receptive hostel managers generously provided us with the data, enabling us to incorporate this critical dimension into our analysis. This endeavor allowed us to cast a more comprehensive and insightful gaze upon the evolving landscape of tourism in the Naples region, with specific emphasis on the unique dynamics associated with hostel accommodations. Because of privacy policy, the data sets available upon requests.*
+
+```{r}
+head(Neh21)
+head(Neh22)
+```
+
+In this visual representation of data, we offer a compelling comparison of guest numbers at the hostel for two pivotal time frames: February 2021 and February 2022. The dynamic area charts vividly illustrate the evolution in the number of guests, providing insight into the hostel's performance during these periods. In February 2021, marked by stringent lockdown measures, the number of guests remained relatively constrained, as indicated by the red-shaded area. However, in stark contrast, February 2022, characterized by a gradual easing of restrictions, witnessed a remarkable surge in guest numbers, represented by the green-shaded area. This substantial increase in guests during the latter period can be attributed to the relaxation of lockdown measures, demonstrating the hostel's adaptability and resilience in responding to changing conditions.
+
+```{r}
+
+p1 <- Neh21 %>%
+  select(Date, Customers) %>%
+  group_by(Date) %>%
+  summarize(Guests = sum(Customers)) %>%
+  ggplot(aes(x = Date, y = Guests)) +
+  geom_area(alpha = 0.6, fill = "red") +
+  labs(title = "#guests of the hostel on Feb 21") +
+  ylim(0, 100)
+
+p2 <- Neh22 %>%
+  select(Date, Customers) %>%
+  group_by(Date) %>%
+  summarize(Guests = sum(Customers)) %>%
+  ggplot(aes(x = Date, y = Guests)) +
+  geom_area(alpha = 0.6, fill = "green") +
+  labs(title = "#guests of the hostel on Feb 22") +
+  ylim(0, 100)
+
+p1 + p2
+
+```
+
+![](https://m.media-amazon.com/images/I/51xG3rk3iWL._UXNaN_FMjpg_QL85_.jpg){width="659"}
+
+**Safety:** *This dataset presents the safety index of the Campania region, focusing on various indicators, including road mortality on non-urban roads, international homicides, reported deadly crimes, reported burglaries, reported pickpocketing incidents, and reported robberies. The data has been specifically filtered to encompass the cities of Napoli, Caserta, Avellino, and Benevento.*
+
+```{r}
+head(Safety_copy)
+
+```
+
+The provided bar charts offer a comprehensive overview of the change in reported crimes from 2018 to 2021 within various provinces of Campania. This information holds significant importance in the context of ensuring the safety of Campania, a crucial element for providing a secure environment for tourists.
+
+In 2018, burglaries emerged as the most frequently reported crime, with Caserta registering the highest number of burglary cases. Pickpocketing incidents were notably prevalent in Naples, which, as the province with the highest tourist influx, was followed by reports of robberies.
+
+```{r}
+Safety <- Safety_copy %>% 
+  pivot_longer(
+    cols = '2018':'2021', 
+    names_to = "Year",
+    values_to = "Value"
+)
+
+Safety <- Safety[-c(1:20),]
+
+Safety_2018 <- Safety %>% filter(Year == '2018')
+
+ggplot(Safety_2018, aes(x = Territory, y = Value, fill = Indicator))+labs(title = "Crimes reported in 2018 by Province",x = "Province",y = "Crimes reported") +
+  geom_bar(stat="identity", width=.5, position = "dodge")+
+  scale_y_continuous(labels=scales::comma)
+```
+
+In 2019, the data closely resembled that of the previous year. Notably, in all other provinces, burglaries remained the predominant type of reported crime, with other offenses being comparatively rare. However, in Naples, undeniably the most popular province in Campania, incidents of pickpocketing and robberies were considerably more common in comparison to other provinces.
+
+```{r}
+Safety_2019 <- Safety %>% filter(Year == '2019')
+
+ggplot(Safety_2019, aes(x = Territory, y = Value, fill = Indicator))+labs(title = "Crimes reported in 2019 by Province",x = "Province",y = "Crimes reported") +
+  geom_bar(stat="identity", width=.5, position = "dodge")+
+  scale_y_continuous(labels=scales::comma)
+```
+
+In 2020, there is a notable decrease in reported crimes across all categories. However, an intriguing observation in Naples is that, while pickpocketing and robberies remain the most prevalent crimes, their incidence is nearly on par with burglaries, which continue to be the most reported crime in the rest of Campania.
+
+```{r}
+Safety_2020 <- Safety %>% filter(Year == '2020')
+
+ggplot(Safety_2020, aes(x = Territory, y = Value, fill = Indicator))+labs(title = "Crimes reported in 2020 by Province",x = "Province",y = "Crimes reported") +
+  geom_bar(stat="identity", width=.5, position = "dodge")+
+  scale_y_continuous(labels=scales::comma)
+```
+
+In 2021, there was a resurgence in reported crimes, even though the tourist numbers were still below the levels of 2018. Notably, in Naples, the incidents of pickpocketing and robberies, although still the most prevalent crimes, were not as numerous as in previous years and were only slightly more common than burglaries. This contrasted with 2018 when the difference was much more pronounced.
+
+```{r}
+Safety_2021 <- Safety %>% filter(Year == '2021')
+
+ggplot(Safety_2021, aes(x = Territory, y = Value, fill = Indicator))+labs(title = "Crimes reported in 2021 by Province",x = "Province",y = "Crimes reported") +
+  geom_bar(stat="identity", width=.5, position = "dodge")+
+  scale_y_continuous(labels=scales::comma)
+```
+
+### **Conclusion:**
+
+The analysis of various datasets pertaining to Campania tourism trends, covering the years 2018 to 2022, reveals valuable insights into the region's visitor patterns, particularly before and after the disruptive impact of the COVID-19 pandemic. Here are the key takeaways from the analysis:
+
+**Air Travel and Resilience:**
+
+-   The data from Capodichino airport showcases the vital role of Naples as an international tourist destination. The enduring appeal of Naples to foreign travelers is evident, with 60% of arrivals attributed to international flights.
+
+-   A profound decline in arriving passengers in 2020, coinciding with the pandemic, underscores the challenges faced by the travel industry. Nevertheless, a resilient recovery trend emerged after 2021, propelled by factors like the relaxation of restrictions and vaccine availability.
+
+**Accommodation Trends:**
+
+-   Guest arrivals saw an uptick in 2019, which was abruptly halted by the pandemic in 2020. Stringent COVID-19 regulations resulted in a significant decline in hotel guest arrivals in 2021, impacting the region's accommodations.
+
+-   Encouragingly, 2022 brought a resurgence in guest arrivals, surpassing pre-pandemic levels, indicating the sector's adaptability and potential for recovery.
+
+**Geographical Variations:**
+
+-   Naples emerged as the most frequented province, drawing tourists from both Italy and abroad in 2018, primarily due to its rich historical heritage, cultural attractions, and picturesque coastline.
+
+-   While the year 2019 witnessed a marginal increase in tourist numbers across all provinces, the most significant shift occurred in 2020, as international travel restrictions led to Italian tourists surpassing their foreign counterparts.
+
+-   In 2022, an upward trend continued, with foreign tourists in Naples surpassing Italian tourists. However, other provinces remained relatively less recognized by international visitors.
+
+**Stay Durations and Tourist Preferences:**
+
+-   The data shows varying durations of stays in different localities, with historical and artistic sites attracting shorter visits while seaside destinations cater to longer periods of leisure, especially during the summer.
+
+**Crime Trends:**
+
+-   The analysis of reported crimes in Campania between 2018 and 2021 demonstrates the significance of ensuring a safe environment for tourists. Notably, burglary was the most reported crime in all provinces, with variations in other crimes, such as pickpocketing and robberies, especially in Naples.
+
+In summary, Campania's tourism sector experienced fluctuations and challenges, notably due to the pandemic. However, the region's resilience, cultural richness, and natural beauty remain significant assets. A proactive and strategic approach to marketing, safety, and diverse tourism offerings is crucial to sustainably enhance tourism, stimulate economic recovery, and ensure Campania's enduring appeal as a destination for both local and international visitors.
+
+**Data Selection and Analysis:**
+The data selection focused on key indicators, such as airport arrivals, guest arrivals to different type of accommodation, and crime statistics, to assess the impact of the pandemic on Campanian tourism. We collected data from multiple years from ISTAT database, allowing us to identify trends and observe the pandemic's influence.
+
+To address the gap in data regarding hostels, we engaged with hostel management teams in Naples to obtain crucial information. This innovative approach contributed to a more holistic understanding of tourism dynamics, especially concerning hostels during the pandemic.
+
+**Economic Impact of the Pandemic:**
+The economic impact of the pandemic on Campania's tourism sector is significant. The stringent regulations and travel restrictions led to a sharp decline in international arrivals and guest arrivals in 2020. This had a profound economic effect on hotels and accommodations. Many facilities struggled, and recovery was challenging. The pandemic-induced drop in arrivals translated to reduced revenue for businesses, loss of jobs, and economic challenges for the region.
+
+**Innovative Solutions to Promote Tourism:**
+
+1.  **Virtual Tourism**: Promote virtual tours and experiences of Campania's cultural and historical sites. Create engaging online content and immersive virtual experiences to attract potential tourists to see all these attraction in real life, social media has a huge rule in this part since according to research new generation is more attracted to TikTok or Instagram, even focusing in these two, could have huge impact.
+
+2.  **Sustainable Tourism**: Emphasize sustainability and eco-tourism. Encourage responsible and eco-friendly travel practices, ensuring the preservation of Campania's natural beauty and cultural heritage which as we said during the analysis of the data sets we have a great potential in natural beauty and cultrural heritage in Campania.
+
+3.  **Cultural Exchange Programs**: Develop programs that facilitate cultural exchanges between tourists and local communities. These exchanges can offer unique insights and enrich the visitor experience.
+
+4.  **Technology Integration**: Use technology such as augmented reality and mobile apps to enhance the tourist experience. These tools can provide real-time information, interactive maps, and language translation services.
+
+5.  **Collaborative Marketing**: Collaborate with neighboring regions and countries to create cross-border tourism initiatives. This can tap into a broader tourist base.
+
+6.  **Themed Tourism**: Promote niche or themed tourism experiences, such as culinary tours, historical reenactments, and art workshops. These can attract specific interest groups and provide unique, memorable experiences.
+
+7.  **Crisis Preparedness**: Develop comprehensive crisis management and preparedness plans to address future challenges like pandemics. Implement flexible policies and procedures to respond swiftly and effectively.
+
+By implementing these innovative solutions, Campania can diversify its tourism offerings, attract a broader range of visitors, and increase resilience in the face of unforeseen challenges, ultimately bolstering the economic recovery and long-term success of the tourism sector.
+
+### SURVEY ANALYSIS:
+
+A core objective of this project is to enhance the quality of visitors' experiences in Campania. To achieve this goal, we utilized Google Forms, we designed a survey aimed at gathering insights from tourists regarding the quality of services and the challenges they encountered during their stay. The primary objective of this survey is to identify areas for improvement in order to enhance the overall tourist experience. To facilitate the survey's dissemination, we created an informative flyer featuring a QR code. This flyer was strategically distributed across multiple platforms, including social media channels, and prominently displayed at key locations such as the Central Station and popular tourist spots. The combination of these efforts allowed us to reach a diverse cross-section of tourists and solicit their valuable feedback.
+
+![](images/paste-4CC806B7.png)
+
+The survey was answered by 109 people, of which 55% were female and the majority of the population is between the age group 18-24.
+
+![](images/paste-98DF1ADC.png)
+
+![](images/paste-96299B1E.png)
+
+
+![](images/paste-08E71C77.png)
+
+In addition, we inquired about the motivations behind tourists' choices to visit Campania. As discerned from the graph, a substantial portion of the respondents cited their primary reasons for traveling to Campania as being the rich culinary experiences, the vibrant cultural attractions, and the captivating coastal areas. These key factors overwhelmingly drive tourism to the region, underscoring their significance in shaping travelers' decisions to explore Campania. 
+
+![](images/paste-13FB62C4.png)
+A significant portion of the population is concentrated in the Naples area, primarily due to its strategic proximity to key transportation hubs, notably the airport and the central Naples station.
+
+As regards the evaluation of the quality of services, they were asked to rate the individual services from excellent to poor.
+
+![](images/paste-33DF0FC3.png)
+
+We can see that half of the tourists traveling to Campania believe that one of the main problems is transport (33 Fair and 17 Poor).
+
+It is evident from our findings that a significant proportion of tourists visiting Campania identify transportation as a key issue, with 33% rating it as "Fair" and 17% as "Poor." To address this concern, one proposed solution is to promote sustainable modes of transportation---those with minimal environmental impact. This approach seeks to strike a balance between the imperative of mobility and the pressing need for sustainability. Notably, the National Resilience and Recovery Plan (PNRR), with a particular emphasis on its third mission, encompasses a range of investments designed to foster the development of a modern, digitally interconnected, and sustainable transport infrastructure network. This network aims to enhance the electrification of transportation, promote digitalization, and bolster the overall competitiveness of the nation, particularly in the Southern regions.
+
+One of the most noteworthy developments in the realm of active tourism, which increasingly leans towards eco-friendly, concise, and authentic experiences, is cycle tourism. This form of tourism is characterized by its unhurried and sustainable nature, encompassing a wide spectrum of activities. It engages various stakeholders and offers a unique perspective on travel for tourism, diverging from the traditional paradigm of mass tourism. Above all, cycle tourism aligns closely with the themes of local development, respect for traditions, and environmental preservation. This approach enables visitors to simultaneously savor and safeguard the environment, forging a direct connection with the area, its culture, history, and traditions.
+
+From an economic and social standpoint, cycle tourism holds the potential to enhance employment rates in tourist destinations, creating direct, indirect, and induced job opportunities. It bolsters competitiveness and attractiveness, particularly in areas that are often peripheral to the conventional tourist offerings, thereby presenting significant avenues for sustainable tourism development. Additionally, it promotes well-being and the use of sustainable transportation, enhancing the quality of life for local residents. This approach also allows residents to become tourists in their own cities, availing themselves of the same services as visiting tourists.
+
+For the successful launch of cycle tourism, collaboration among diverse local stakeholders is essential. This collaborative network includes regional, provincial, and municipal authorities, local communities, and tourism service providers, such as hoteliers, restaurateurs, and travel agents. The key initiatives involve:
+
+• **Development of Cycling Infrastructure:** Creating a well-signposted and safe network of cycling routes suitable for cyclists of varying skill levels.
+
+• **Route Mapping and Reporting:** Generating detailed maps of cycling routes, including starting points, points of interest, services (bike rentals, rest areas, assistance points), and information on route difficulty. Installation of signage along routes for guidance and provision of helpful information.
+
+• **Promotion of Cycle Tourism:** Actively promoting cycle tourism in Campania through targeted marketing campaigns, utilizing online communication channels, social media, websites, and tourist guides to disseminate information about cycling routes, highlight attractions, and showcase the cycling tourism experience in the region.
+
+• **Support Services for Cycle Tourists:** Ensuring the availability of support services for cycle tourists along the routes, such as bicycle rental points, refreshment stations, repair service points, and secure bicycle storage facilities. Collaboration with local suppliers to offer discounts or special packages to cycle tourists.
+
+• **Mobile Application:** Developing an app to provide tourists with easy access to a wide range of information, including refreshments, accommodations, and cultural sites. The app serves an additional purpose as it aids tourism researchers in tracking tourist flows. To engage tourists, an app-game based on the motto "the more you visit, the less you pollute" can be created, allowing tourists to scan QR codes at various sites. Completing the entire journey can earn them discounts or coupons at hotel facilities and restaurants.
+
+A practical example of this approach can be observed in Caserta, where a significant number of tourists arriving by train typically visit the Royal Palace of Caserta. To redirect tourist flows and encourage exploration of the surrounding areas, bicycle rentals should be available at the station. This would facilitate visits to nearby attractions, such as Caserta Vecchia, the Royal Palace of Carditello, the Belvedere San Leucio Monumental Complex, and the WWF Bosco di San Silvestro Oasis. Bicycles can simultaneously enable tourists to engage in other forms of tourism, including cultural, naturalistic, and gastronomic experiences.
+
+Crucially, this initiative requires close collaboration among stakeholders to plan and implement well-structured cycling itineraries. These itineraries could be thematically designed based on the chosen area. For instance, in the Casertana region, the itinerary could revolve around the places where the Bourbons resided, offering a historical perspective. This model is replicable in other provinces, as Campania boasts a wealth of UNESCO sites, picturesque villages, and natural beauty.
+
+Notably, there are funds available from the state to support sustainable tourism, including the action of the National Tourism Fund (FUNT), which allocates €5.8 million to finance projects aimed at enhancing sustainable routes in Campania, Apulia, and Emilia-Romagna.
