@@ -1,3 +1,5 @@
+vim: syntax=r
+
 ---
 title: "hack4torism"
 author: "Ali Sarabandi & Angela Castaldo"
